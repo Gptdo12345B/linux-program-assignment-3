@@ -1,5 +1,7 @@
 #include "systemcalls.h"
-
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/wait.h>
 /**
  * @param cmd the command to execute with system()
  * @return true if the command in @param cmd was executed
@@ -16,8 +18,9 @@ bool do_system(const char *cmd)
  *   and return a boolean true if the system() call completed with success
  *   or false() if it returned a failure
 */
-
-    return true;
+    int retCode = system (cmd);
+    bool success = (retCode == 0) ? true : false;
+    return success;
 }
 
 /**
@@ -43,6 +46,7 @@ bool do_exec(int count, ...)
     for(i=0; i<count; i++)
     {
         command[i] = va_arg(args, char *);
+        printf("\nloop: %d. command: %s\n", i, command[i]);
     }
     command[count] = NULL;
     // this line is to avoid a compile warning before your implementation is complete
@@ -59,9 +63,42 @@ bool do_exec(int count, ...)
  *
 */
 
+    // Make a child process.  The parent will wait for it, while the child
+    // replaces its program image with the requested command.
+    pid_t pid = fork();
+
+    if (pid < 0) {
+        // fork() failed, so no child exists to execute or wait for.
+        va_end(args);
+        return false;
+    }
+
+    if (pid == 0) {
+        // This branch executes only in the child.  A successful execv() never
+        // returns: it replaces this process with command[0].
+        execv(command[0], command);
+
+        // execv() returns only on failure.  End the child immediately so it does
+        // not continue into the parent's wait/status logic.
+        perror("execv");
+        _exit(EXIT_FAILURE);
+    }
+
+    int status;
+    // This branch is the parent.  Wait for this specific child so its exit
+    // status can be used to decide whether the requested command succeeded.
+    if (waitpid(pid, &status, 0) < 0) {
+        va_end(args);
+        return false;
+    }
+
+    // The variadic argument list is no longer needed after command[] is built.
     va_end(args);
 
-    return true;
+    // status is encoded by waitpid().  Return true only when the child ended
+    // normally and the program reported the conventional success exit code (0).
+    return WIFEXITED(status) && WEXITSTATUS(status);
+  
 }
 
 /**
@@ -78,6 +115,7 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     for(i=0; i<count; i++)
     {
         command[i] = va_arg(args, char *);
+        printf("\nloop: %d. command: %s\n", i, command[i]);
     }
     command[count] = NULL;
     // this line is to avoid a compile warning before your implementation is complete
