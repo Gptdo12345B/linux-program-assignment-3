@@ -97,7 +97,9 @@ bool do_exec(int count, ...)
 
     // status is encoded by waitpid().  Return true only when the child ended
     // normally and the program reported the conventional success exit code (0).
-    return WIFEXITED(status) && WEXITSTATUS(status);
+    // return true if executed successfully, else false. In linux, successful command 
+    // yeids 0.
+    return WIFEXITED(status) && (WEXITSTATUS(status) == 0);
   
 }
 
