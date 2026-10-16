@@ -1,4 +1,5 @@
 #include "systemcalls.h"
+#include <fcntl.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/wait.h>
@@ -11,9 +12,7 @@
 */
 bool do_system(const char *cmd)
 {
-
 /*
- * TODO  add your code here
  *  Call the system() function with the command set in the cmd
  *   and return a boolean true if the system() call completed with success
  *   or false() if it returned a failure
@@ -54,7 +53,6 @@ bool do_exec(int count, ...)
     command[count] = command[count];
 
 /*
- * TODO:
  *   Execute a system command by calling fork, execv(),
  *   and wait instead of system (see LSP page 161).
  *   Use the command[0] as the full path to the command to execute
@@ -62,7 +60,6 @@ bool do_exec(int count, ...)
  *   as second argument to the execv() command.
  *
 */
-
     // Make a child process.  The parent will wait for it, while the child
     // replaces its program image with the requested command.
     pid_t pid = fork();
@@ -123,17 +120,59 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     // this line is to avoid a compile warning before your implementation is complete
     // and may be removed
     command[count] = command[count];
-
-
 /*
- * TODO
  *   Call execv, but first using https://stackoverflow.com/a/13784315/1446624 as a refernce,
  *   redirect standard out to a file specified by outputfile.
  *   The rest of the behaviour is same as do_exec()
  *
 */
 
+   // Make a child process.  The parent will wait for it, while the child
+    // replaces its program image with the requested command.
+    pid_t pid = fork();
+
+    if (pid < 0) {
+        // fork() failed, so no child exists to execute or wait for.
+        va_end(args);
+        return false;
+    }
+
+    if (pid == 0) {
+        int fd = open(outputfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (fd < 0) {
+            _exit(EXIT_FAILURE);
+        }
+
+        if (dup2(fd, STDOUT_FILENO) < 0) {
+            close(fd);
+            _exit(EXIT_FAILURE);
+        }
+
+        close(fd);
+        // This branch executes only in the child.  A successful execv() never
+        // returns: it replaces this process with command[0].
+        execv(command[0], command);
+
+        // execv() returns only on failure.  End the child immediately so it does
+        // not continue into the parent's wait/status logic.
+        perror("execv");
+        _exit(EXIT_FAILURE);
+    }
+
+    int status;
+    // This branch is the parent.  Wait for this specific child so its exit
+    // status can be used to decide whether the requested command succeeded.
+    if (waitpid(pid, &status, 0) < 0) {
+        va_end(args);
+        return false;
+    }
+
+    // The variadic argument list is no longer needed after command[] is built.
     va_end(args);
 
-    return true;
+    // status is encoded by waitpid().  Return true only when the child ended
+    // normally and the program reported the conventional success exit code (0).
+    // return true if executed successfully, else false. In linux, successful command 
+    // yeids 0.
+    return WIFEXITED(status) && (WEXITSTATUS(status) == 0);
 }
